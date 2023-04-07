@@ -63,7 +63,7 @@ public class Board : MonoBehaviour
             case CellType.Empty:
                 return tileEmpty;
             case CellType.Mine:
-                return tileMine;
+                return cell.exploded ? tileExploded : tileMine;
             case CellType.Number:
                 return GetNumberTile(cell);
             default:

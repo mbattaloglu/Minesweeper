@@ -11,6 +11,13 @@ public class Game : MonoBehaviour
 
     private Cell[][] state;
 
+    private bool gameOver = false;
+
+    private void OnValidate()
+    {
+        minesCount = Mathf.Clamp(minesCount, 0, width * height);
+    }
+
     private void Awake()
     {
         board = GetComponentInChildren<Board>();
@@ -21,14 +28,170 @@ public class Game : MonoBehaviour
         NewGame();
     }
 
-    private void NewGame()
+    private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            NewGame();
+        }
+
+        else if (!gameOver)
+        {
+            if (Input.GetMouseButtonDown(0))
+            {
+                Reveal();
+            }
+
+            if (Input.GetMouseButtonDown(1))
+            {
+                Flag();
+            }
+        }
+
+    }
+
+    public void NewGame()
+    {
+        gameOver = false;
         state = new Cell[width][];
         GenerateCells();
         GenerateMines();
         GenerateNumbers();
         Camera.main.transform.position = new Vector3(width / 2f, height / 2f, -10);
         board.Draw(state);
+    }
+
+    private void Reveal()
+    {
+        Vector3 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector3Int cellPosition = board.tilemap.WorldToCell(mousePosition);
+        Cell cell = GetCell(cellPosition.x, cellPosition.y);
+
+        if (cell.type == CellType.Invalid || cell.revealed || cell.flagged)
+        {
+            return;
+        }
+
+        switch (cell.type)
+        {
+            case CellType.Mine:
+                Explode(cell);
+                break;
+            case CellType.Empty:
+                Flood(cell);
+                CheckWinCondition();
+                break;
+            default:
+                cell.revealed = true;
+                state[cellPosition.x][cellPosition.y] = cell;
+                CheckWinCondition();
+                break;
+        }
+        board.Draw(state);
+    }
+
+    private void Flag()
+    {
+        Vector3 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector3Int cellPosition = board.tilemap.WorldToCell(mousePosition);
+        Cell cell = GetCell(cellPosition.x, cellPosition.y);
+
+        if (cell.type == CellType.Invalid || cell.revealed)
+        {
+            return;
+        }
+
+        cell.flagged = !cell.flagged;
+        state[cellPosition.x][cellPosition.y] = cell;
+        board.Draw(state);
+    }
+
+    private void Flood(Cell cell)
+    {
+        if (cell.revealed)
+        {
+            return;
+        }
+
+        if (cell.type == CellType.Invalid || cell.type == CellType.Mine)
+        {
+            return;
+        }
+
+        cell.revealed = true;
+        state[cell.position.x][cell.position.y] = cell;
+
+        if (cell.type == CellType.Empty)
+        {
+            Flood(GetCell(cell.position.x - 1, cell.position.y));
+            Flood(GetCell(cell.position.x + 1, cell.position.y));
+            Flood(GetCell(cell.position.x, cell.position.y - 1));
+            Flood(GetCell(cell.position.x, cell.position.y + 1));
+        }
+    }
+
+    private void Explode(Cell cell)
+    {
+        Debug.Log("Boom!");
+        gameOver = true;
+
+        cell.revealed = true;
+        cell.exploded = true;
+        state[cell.position.x][cell.position.y] = cell;
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                cell = state[x][y];
+                if (cell.type == CellType.Mine && !cell.flagged)
+                {
+                    cell.revealed = true;
+                    state[x][y] = cell;
+                }
+            }
+        }
+    }
+
+    private void CheckWinCondition()
+    {
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Cell cell = state[x][y];
+                if (cell.type != CellType.Mine && !cell.revealed)
+                {
+                    return;
+                }
+            }
+        }
+
+        Debug.Log("You win!");
+        gameOver = true;
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Cell cell = state[x][y];
+                if (cell.type == CellType.Mine)
+                {
+                    cell.flagged = true;
+                    state[x][y] = cell;
+                }
+            }
+        }
+    }
+
+    private Cell GetCell(int x, int y)
+    {
+        if (IsValid(x, y))
+        {
+            return state[x][y];
+        }
+
+        return new Cell() { type = CellType.Invalid };
     }
 
     private void GenerateCells()
@@ -80,7 +243,7 @@ public class Game : MonoBehaviour
                 }
 
                 state[x][y] = cell;
-                
+
             }
         }
     }
@@ -93,20 +256,15 @@ public class Game : MonoBehaviour
         {
             for (int adjecentY = -1; adjecentY <= 1; adjecentY++)
             {
-                int x = cellX + adjecentX;
-                int y = cellY + adjecentY;
-
                 if (adjecentX == 0 && adjecentY == 0)
                 {
                     continue;
                 }
 
-                if (x < 0 || x >= width || y < 0 || y >= height)
-                {
-                    continue;
-                }
+                int x = cellX + adjecentX;
+                int y = cellY + adjecentY;
 
-                if (state[x][y].type == CellType.Mine)
+                if (GetCell(x, y).type == CellType.Mine)
                 {
                     count++;
                 }
@@ -114,5 +272,10 @@ public class Game : MonoBehaviour
         }
 
         return count;
+    }
+
+    private bool IsValid(int x, int y)
+    {
+        return x >= 0 && x < width && y >= 0 && y < height;
     }
 }
